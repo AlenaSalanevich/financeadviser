@@ -1,6 +1,5 @@
 import io
-from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -23,16 +22,20 @@ def _pdf_file(
 
 
 @pytest.mark.asyncio
-async def test_upload_pdf_success(client: AsyncClient, tmp_path: Path) -> None:
-    with patch("app.api.v1.endpoints.data.DATA_DIR", tmp_path):
+async def test_upload_pdf_success(client: AsyncClient) -> None:
+    with patch(
+        "app.api.v1.endpoints.data.embed_pdf",
+        new_callable=AsyncMock,
+        return_value=5,
+    ):
         response = await client.post(UPLOAD_URL, files=_pdf_file())
 
     assert response.status_code == 201
     body = response.json()
     assert body["filename"] == "test.pdf"
     assert body["size_bytes"] == len(MINIMAL_PDF)
-    assert "uploaded successfully" in body["message"]
-    assert (tmp_path / "test.pdf").read_bytes() == MINIMAL_PDF
+    assert body["chunks_stored"] == 5
+    assert "uploaded successfully" in body["message"] or "uploaded and embedded" in body["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -74,17 +77,18 @@ async def test_upload_oversized_file(client: AsyncClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Server-side I/O error
+# Service error
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_upload_disk_write_error(client: AsyncClient, tmp_path: Path) -> None:
-    with (
-        patch("app.api.v1.endpoints.data.DATA_DIR", tmp_path),
-        patch("pathlib.Path.write_bytes", side_effect=OSError("disk full")),
+async def test_upload_service_error(client: AsyncClient) -> None:
+    with patch(
+        "app.api.v1.endpoints.data.embed_pdf",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("connection refused"),
     ):
         response = await client.post(UPLOAD_URL, files=_pdf_file())
 
     assert response.status_code == 500
-    assert "Failed to save" in response.json()["detail"]
+    assert "Failed to process" in response.json()["detail"]

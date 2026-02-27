@@ -1,14 +1,14 @@
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from app.services.loader import embed_pdf
+
 # TODO: Import and apply auth dependency once auth is implemented, e.g.:
 # from app.dependencies import get_current_user
 # from fastapi import Depends
 
-DATA_DIR = Path(__file__).resolve().parents[4] / "data"
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 
 router = APIRouter()
@@ -17,6 +17,7 @@ router = APIRouter()
 class UploadResponse(BaseModel):
     filename: str
     size_bytes: int
+    chunks_stored: int
     message: str
 
     model_config = {
@@ -24,7 +25,8 @@ class UploadResponse(BaseModel):
             "example": {
                 "filename": "bank_statement_jan_2026.pdf",
                 "size_bytes": 204800,
-                "message": "File 'bank_statement_jan_2026.pdf' uploaded successfully.",
+                "chunks_stored": 12,
+                "message": "File 'bank_statement_jan_2026.pdf' uploaded and embedded (12 chunks).",
             }
         }
     }
@@ -37,8 +39,8 @@ class UploadResponse(BaseModel):
     summary="Upload a PDF document",
     description=(
         "Upload a PDF file for financial document analysis.\n\n"
-        "The file is saved to the server's `data/` directory and can subsequently "
-        "be indexed into the RAG vectorstore via the data loader script.\n\n"
+        "The file is processed in memory: text is extracted, split into chunks, "
+        "embedded with OpenAI, and stored in Supabase via pgvector.\n\n"
         "**Constraints**\n"
         "- Only `application/pdf` files are accepted.\n"
         "- Maximum file size: **50 MB**.\n\n"
@@ -47,13 +49,14 @@ class UploadResponse(BaseModel):
     ),
     responses={
         201: {
-            "description": "PDF uploaded and saved successfully.",
+            "description": "PDF processed and embeddings stored successfully.",
             "content": {
                 "application/json": {
                     "example": {
                         "filename": "bank_statement_jan_2026.pdf",
                         "size_bytes": 204800,
-                        "message": "File 'bank_statement_jan_2026.pdf' uploaded successfully.",
+                        "chunks_stored": 12,
+                        "message": "File 'bank_statement_jan_2026.pdf' uploaded and embedded (12 chunks).",
                     }
                 }
             },
@@ -75,10 +78,10 @@ class UploadResponse(BaseModel):
             },
         },
         500: {
-            "description": "Server failed to write the file to disk.",
+            "description": "Server failed to embed and store the file.",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Failed to save the file. Please try again."}
+                    "example": {"detail": "Failed to process the file. Please try again."}
                 }
             },
         },
@@ -120,19 +123,17 @@ async def upload_pdf(
             detail=f"File size {len(contents)} bytes exceeds the 50 MB limit.",
         )
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    destination = DATA_DIR / file.filename
-
     try:
-        destination.write_bytes(contents)
-    except OSError as exc:
+        chunks_stored = await embed_pdf(contents, file.filename)
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save the file. Please try again.",
+            detail="Failed to process the file. Please try again.",
         ) from exc
 
     return UploadResponse(
         filename=file.filename,
         size_bytes=len(contents),
-        message=f"File '{file.filename}' uploaded successfully.",
+        chunks_stored=chunks_stored,
+        message=f"File '{file.filename}' uploaded and embedded ({chunks_stored} chunks).",
     )
