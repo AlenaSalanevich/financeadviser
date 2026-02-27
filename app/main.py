@@ -1,11 +1,25 @@
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 
+from app.api.v1.router import api_router
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger.info("FinanceAdviser API starting up...")
+    logger.info("Documentation available at: /docs")
+    yield
+    logger.info("FinanceAdviser API shutting down...")
+
 
 # Create FastAPI application instance
 app = FastAPI(
@@ -14,6 +28,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
@@ -24,6 +39,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(api_router)
 
 # Root endpoint
 @app.get("/")
@@ -49,19 +66,6 @@ async def health_check():
             "version": "0.1.0"
         }
     )
-
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Execute on application startup"""
-    logger.info("🚀 FinanceAdviser API starting up...")
-    logger.info("📚 Documentation available at: /docs")
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Execute on application shutdown"""
-    logger.info("👋 FinanceAdviser API shutting down...")
 
 # Optional: Main function for running with python app/main.py
 if __name__ == "__main__":
