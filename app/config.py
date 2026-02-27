@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     db_host: str = ""
     model_id: str = "gpt-4o-mini"
     embedding_model_id: str = "text-embedding-3-small"
+    log_level: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

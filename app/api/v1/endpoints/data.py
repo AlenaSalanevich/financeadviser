@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from app.core.logging import get_logger
 from app.services.loader import embed_pdf
 
 # TODO: Import and apply auth dependency once auth is implemented, e.g.:
@@ -11,6 +12,7 @@ from app.services.loader import embed_pdf
 
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -123,14 +125,17 @@ async def upload_pdf(
             detail=f"File size {len(contents)} bytes exceeds the 50 MB limit.",
         )
 
+    logger.info("Embedding '%s' (%d bytes)", file.filename, len(contents))
     try:
         chunks_stored = await embed_pdf(contents, file.filename)
     except Exception as exc:
+        logger.exception("embed_pdf failed for '%s'", file.filename)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process the file. Please try again.",
         ) from exc
 
+    logger.info("Stored %d chunks for '%s'", chunks_stored, file.filename)
     return UploadResponse(
         filename=file.filename,
         size_bytes=len(contents),

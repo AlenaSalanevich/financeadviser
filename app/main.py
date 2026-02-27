@@ -4,13 +4,13 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import logging
 
 from app.api.v1.router import api_router
+from app.config import settings
+from app.core.logging import get_logger, setup_logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+setup_logging(settings.log_level)
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
