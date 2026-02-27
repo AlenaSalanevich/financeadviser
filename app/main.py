@@ -63,7 +63,11 @@ async def health_check():
         content={
             "status": "healthy",
             "service": "FinanceAdviser",
-            "version": "0.1.0"
+            "version": "0.1.0",
+            "services": {
+                "data": "/api/v1/data/health",
+                "retrieval": "/api/v1/search/health",
+            }
         }
     )
 

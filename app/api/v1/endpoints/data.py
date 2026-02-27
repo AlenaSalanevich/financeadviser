@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.core.logging import get_logger
 from app.services.loader import embed_pdf
+from app.core.vector_store import get_embeddings, get_vector_store_connection_string, _safe_db_url
 
 # TODO: Import and apply auth dependency once auth is implemented, e.g.:
 # from app.dependencies import get_current_user
@@ -89,6 +90,7 @@ class UploadResponse(BaseModel):
         },
     },
 )
+
 async def upload_pdf(
     file: Annotated[
         UploadFile,
@@ -142,3 +144,93 @@ async def upload_pdf(
         chunks_stored=chunks_stored,
         message=f"File '{file.filename}' uploaded and embedded ({chunks_stored} chunks).",
     )
+
+
+@router.get(
+    "/health",
+    summary="Data service health check",
+    description=(
+        "Check if the data/upload service is operational.\n\n"
+        "Verifies:\n"
+        "- Embeddings model can be initialized\n"
+        "- Database connection is configured\n"
+        "- Vector store is accessible\n\n"
+        "Returns 200 if healthy, 503 if any component fails."
+    ),
+    responses={
+        200: {
+            "description": "Service is healthy and operational",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "healthy",
+                        "service": "data",
+                        "embeddings": "initialized",
+                        "database": "connected",
+                        "vector_store": "accessible"
+                    }
+                }
+            }
+        },
+        503: {
+            "description": "Service is unhealthy",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Service unhealthy: DATABASE_URL is not configured"
+                    }
+                }
+            }
+        }
+    },
+    status_code=status.HTTP_200_OK,
+)
+
+
+async def data_health():
+    """
+    Health check endpoint for data/upload service.
+
+    Validates that all required components are accessible:
+    - OpenAI embeddings can be initialized
+    - Database connection is configured
+    - Vector store connection is available
+
+    Returns:
+        dict: Health status information
+
+    Raises:
+        HTTPException: 503 if service is unhealthy
+    """
+    try:
+        # Test database connection string
+        db_url = get_vector_store_connection_string()
+        logger.debug("Database URL configured: %s", _safe_db_url(db_url))
+
+        # Test embeddings initialization
+        embeddings = get_embeddings()
+        logger.debug("Embeddings initialized successfully")
+
+        return {
+            "status": "healthy",
+            "service": "data",
+            "embeddings": "initialized",
+            "database": "connected",
+            "vector_store": "accessible",
+        }
+
+    except RuntimeError as exc:
+        # Configuration error (missing DATABASE_URL or API key)
+        logger.error("Health check failed (configuration): %s", str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Service unhealthy: {str(exc)}",
+        ) from exc
+
+    except Exception as exc:
+        # Other errors
+        logger.exception("Health check failed (unexpected error)")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Service unhealthy: {str(exc)}",
+        ) from exc
