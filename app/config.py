@@ -4,8 +4,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     open_api_key: str = ""
+    anthropic_api_key: str = ""
     database_url: str = ""
     model_id: str = "gpt-4o-mini"
+    anthropic_model_id: str = "claude-sonnet-4-6"
     embedding_model_id: str = "text-embedding-3-small"
     log_level: str = "INFO"
 

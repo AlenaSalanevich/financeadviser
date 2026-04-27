@@ -35,7 +35,7 @@ class AgentRequest(BaseModel):
         5,
         description="Number of relevant documents to retrieve for context",
         ge=1,
-        le=20,
+        le=150,
     )
     source: Optional[str] = Field(
         None,

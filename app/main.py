@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.config import settings
@@ -42,17 +44,33 @@ app.add_middleware(
 
 app.include_router(api_router)
 
-# Root endpoint
-@app.get("/")
-async def root():
-    """Root endpoint - API information"""
-    return {
-        "message": "Welcome to FinanceAdviser API",
-        "version": "0.1.0",
-        "status": "running",
-        "docs": "/docs",
-        "redoc": "/redoc"
-    }
+# Serve frontend static assets if the dist directory exists
+_FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+if _FRONTEND_DIST.exists():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(_FRONTEND_DIST / "assets")),
+        name="assets",
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        """Serve index.html for all non-API routes (SPA client-side routing)."""
+        index = _FRONTEND_DIST / "index.html"
+        return FileResponse(str(index))
+
+else:
+    # Root endpoint — API-only mode (no built frontend)
+    @app.get("/")
+    async def root():
+        """Root endpoint - API information"""
+        return {
+            "message": "Welcome to FinanceAdviser API",
+            "version": "0.1.0",
+            "status": "running",
+            "docs": "/docs",
+            "redoc": "/redoc",
+        }
 
 # Health check endpoint
 @app.get("/health")
